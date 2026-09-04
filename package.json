@@ -6,8 +6,7 @@
     "unity": "6000.3",
     "unityRelease": "23f1",
     "author": {
-    "name": "Laboratory for Underwater Systems and Technologies (LABUST)",
-    "email": "",
-    "url": "https://labust.fer.hr/"
-  }
+      "name": "LABUST",
+      "url": "http://labust.fer.hr/"
+    }
 }
