@@ -1,5 +1,5 @@
 {
-  "name": "com.labust.marus2.proto",
+  "name": "com.marus2.proto",
   "version": "1.0.0",
   "displayName": "MARUS2 Protobuf Definitions",
   "description": "gRPC and Protobuf message definitions and generated code for the MARUS2 (Marine Robotics Unity Simulator) architecture.",
