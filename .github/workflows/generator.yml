@@ -54,7 +54,7 @@ jobs:
       - name: Save updated C# code
         run: |
           # Clean up old files to prevent dangling metas
-          rm -f *.cs *.meta
+          rm -f *.cs *.cs.meta
           mv ../csharp/*.cs .
 
           # Generate deterministic Unity .meta files
