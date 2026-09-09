@@ -28,20 +28,26 @@ jobs:
       - name: Generate code
         run: protoc -I=protos --csharp-grpc_out=../csharp --csharp_out=../csharp --python-grpc_out=../python --python_out=../python protos/*
 
-      #- name: Generate code for grpc-dotnet
-      #  run:  touch ../grpc-dotnet/proj.csproj && echo '<Project Sdk="Microsoft.NET.Sdk">
-      #    <PropertyGroup>
-      #    <TargetFramework>netstandard2.1</TargetFramework>
-      #    </PropertyGroup>
-      #    <ItemGroup>
-      #    <PackageReference Include="Google.Protobuf" Version="3.20.1-rc1" />
-      #    <PackageReference Include="Grpc.Net.Client" Version="2.45.0-pre1" />
-      #    <PackageReference Include="Grpc.Tools" Version="2.45.0-pre1" />
-      #    <Protobuf Include="../labustsim-proto/protos/**/*.proto" ProtoRoot="../labustsim-proto/protos" CompileOutputs="false"
-      #    OutputDir="generated"/>
-      #    </ItemGroup>
-      #    </Project>' >> ../grpc-dotnet/proj.csproj && dotnet build ../grpc-dotnet/proj.csproj
-      #    && ls && ls .. && ls ../grpc-dotnet
+      - name: Generate code for grpc-dotnet
+        run: |
+          mkdir -p ../grpc-dotnet/generated
+          cat << 'EOF' > ../grpc-dotnet/proj.csproj
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>netstandard2.1</TargetFramework>
+            </PropertyGroup>
+            <ItemGroup>
+              <PackageReference Include="Google.Protobuf" Version="3.25.1" />
+              <PackageReference Include="Grpc.Net.Client" Version="2.60.0" />
+              <PackageReference Include="Grpc.Tools" Version="2.60.0">
+                <PrivateAssets>all</PrivateAssets>
+                <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+              </PackageReference>
+              <Protobuf Include="${{ github.workspace }}/protos/**/*.proto" ProtoRoot="${{ github.workspace }}/protos" CompileOutputs="false" OutputDir="generated"/>
+            </ItemGroup>
+          </Project>
+          EOF
+          dotnet build ../grpc-dotnet/proj.csproj
 
       - name: Prepare Github
         run: |
@@ -130,19 +136,62 @@ jobs:
             echo "Files did not change in this revision."
           fi
 
-      #- uses: actions/checkout@v2
-      #  with:
-      #    ref: grpc-dotnet
-      #- name: Save updated C# code (dotnet)
-      #  run: |
-      #    rm -f *.cs
-      #    mv ../grpc-dotnet/generated/*.cs .
-      #    git add *
-      #    if [[ -n $(git status -s) ]]
-      #    then
-      #      echo "Files have changed in this revision."
-      #      git commit -am "C# code generated based on revision $(git rev-parse --short "$GITHUB_SHA")."
-      #      git push
-      #    else
-      #      echo "Files did not change in this revision."
-      #    fi
+      - uses: actions/checkout@v2
+        with:
+          ref: grpc-dotnet
+      - name: Save updated C# code (dotnet)
+        run: |
+          # Clean up old files to prevent dangling metas
+          rm -f *.cs *.cs.meta
+          mv ../grpc-dotnet/generated/*.cs .
+
+          # Generate deterministic Unity .meta files
+          cat << 'EOF' > generate_meta.py
+          import os
+          import hashlib
+
+          def generate_guid(rel_path):
+              return hashlib.md5(rel_path.encode('utf-8')).hexdigest()
+
+          def create_meta(path):
+              if path.endswith('.meta') or '.git' in path or path.endswith('generate_meta.py'):
+                  return
+              if os.path.exists(f"{path}.meta"):
+                  return
+
+              guid = generate_guid(path)
+              is_dir = os.path.isdir(path)
+              is_cs = path.endswith('.cs')
+
+              with open(f"{path}.meta", 'w') as f:
+                  f.write("fileFormatVersion: 2\n")
+                  f.write(f"guid: {guid}\n")
+
+                  if is_dir:
+                      f.write("folderAsset: yes\n")
+                      f.write("DefaultImporter:\n  externalObjects: {}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
+                  elif is_cs:
+                      f.write("MonoImporter:\n  externalObjects: {}\n  serializedVersion: 2\n  defaultReferences: []\n  executionOrder: 0\n  icon: {instanceID: 0}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
+                  else:
+                      f.write("DefaultImporter:\n  externalObjects: {}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
+
+          for root, dirs, files in os.walk('.'):
+              if '.git' in root:
+                  continue
+              for name in files + dirs:
+                  if name == '.': continue
+                  create_meta(os.path.join(root, name))
+          EOF
+          python3 generate_meta.py
+          rm generate_meta.py
+
+          # Stage all files, including new hidden .meta files
+          git add .
+          if [[ -n $(git status -s) ]]
+          then
+            echo "Files have changed in this revision."
+            git commit -am "C# code generated based on revision $(git rev-parse --short "$GITHUB_SHA")."
+            git push
+          else
+            echo "Files did not change in this revision."
+          fi
